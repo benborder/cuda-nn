@@ -4,14 +4,23 @@
 
 #include <vector>
 
+struct Size
+{
+	int y;
+	int x;
+};
+
 class Matrix2d
 {
 public:
-	Matrix2d(const std::vector<float>& data, int y, int x = 1);
+	Matrix2d(const std::vector<float>& data, Size size);
 	Matrix2d(const Matrix2d& mat);
 	Matrix2d(Matrix2d&& mat);
 
 	~Matrix2d();
+
+	Size size() const;
+	int num_elements() const;
 
 	Matrix2d add(const Matrix2d& mat) const;
 	Matrix2d sub(const Matrix2d& mat) const;
@@ -44,16 +53,15 @@ public:
 	float get(int y, int x) const;
 	std::vector<float> get() const;
 
-	void set(const std::vector<float>& data, int x, int y);
+	void set(const std::vector<float>& data, Size size);
 
 private:
-	Matrix2d(int y, int x);
+	Matrix2d(Size size);
 	void check_bounds_match(const Matrix2d& mat) const;
 
 private:
 	float* d_data_ = nullptr;
-	int max_x_;
-	int max_y_;
+	Size size_;
 	int num_elements_;
 	dim3 blocks_ = {64, 64, 1};
 	dim3 threads_ = {8, 8, 1};

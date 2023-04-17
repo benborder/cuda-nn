@@ -170,46 +170,42 @@ __global__ void cuda_sum(float* mat, float* sum, int n)
 	if (tid == 0) { atomicAdd(sum, tsum); }
 }
 
-Matrix2d::Matrix2d(int y, int x) : max_x_(x), max_y_(y), num_elements_(x * y)
+Matrix2d::Matrix2d(Size size) : size_(size), num_elements_(size_.x * size_.y)
 {
-	assert(x > 0);
-	assert(y > 0);
+	assert(size_.x > 0);
+	assert(size_.y > 0);
 	blocks_ = dim3(
-		std::min<unsigned int>(64, (x + threads_.x - 1) / threads_.x),
-		std::min<unsigned int>(64, (y + threads_.y - 1) / threads_.y));
+		std::min<unsigned int>(64, (size_.x + threads_.x - 1) / threads_.x),
+		std::min<unsigned int>(64, (size_.y + threads_.y - 1) / threads_.y));
 
 	CHECK_CUDA_ERROR(cudaMalloc(&d_data_, num_elements_ * sizeof(float)));
 }
 
-Matrix2d::Matrix2d(const std::vector<float>& data, int y, int x)
+Matrix2d::Matrix2d(const std::vector<float>& data, Size size)
 {
 	assert(data.size() > 0);
-	if (y < 0)
+	if (size.y < 0)
 	{
-		x = 1;
-		y = static_cast<int>(data.size());
+		size.x = 1;
+		size.y = static_cast<int>(data.size());
 	}
 	else
 	{
-		assert(x > 0);
-		assert(y > 0);
-		assert(data.size() == static_cast<size_t>(x * y));
+		assert(size.x > 0);
+		assert(size.y > 0);
+		assert(data.size() == static_cast<size_t>(size.x * size.y));
 	}
 
 	blocks_ = dim3(
-		std::min<unsigned int>(64, (x + threads_.x - 1) / threads_.x),
-		std::min<unsigned int>(64, (y + threads_.y - 1) / threads_.y));
+		std::min<unsigned int>(64, (size.x + threads_.x - 1) / threads_.x),
+		std::min<unsigned int>(64, (size.y + threads_.y - 1) / threads_.y));
 
 	CHECK_CUDA_ERROR(cudaMalloc((void**)&d_data_, data.size() * sizeof(float)));
-	set(data, y, x);
+	set(data, size);
 }
 
 Matrix2d::Matrix2d(const Matrix2d& mat)
-		: max_x_(mat.max_x_)
-		, max_y_(mat.max_y_)
-		, num_elements_(mat.num_elements_)
-		, blocks_(mat.blocks_)
-		, threads_(mat.threads_)
+		: size_(mat.size_), num_elements_(mat.num_elements_), blocks_(mat.blocks_), threads_(mat.threads_)
 {
 	CHECK_CUDA_ERROR(cudaMalloc((void**)&d_data_, num_elements_ * sizeof(float)));
 	CHECK_CUDA_ERROR(cudaMemcpy(d_data_, mat.d_data_, num_elements_ * sizeof(float), cudaMemcpyDeviceToDevice));
@@ -217,15 +213,13 @@ Matrix2d::Matrix2d(const Matrix2d& mat)
 
 Matrix2d::Matrix2d(Matrix2d&& mat)
 		: d_data_(mat.d_data_)
-		, max_x_(mat.max_x_)
-		, max_y_(mat.max_y_)
+		, size_(mat.size_)
 		, num_elements_(mat.num_elements_)
 		, blocks_(mat.blocks_)
 		, threads_(mat.threads_)
 {
 	mat.d_data_ = nullptr;
-	mat.max_x_ = 0;
-	mat.max_y_ = 0;
+	mat.size_ = {0, 0};
 	mat.num_elements_ = 0;
 }
 
@@ -235,17 +229,27 @@ Matrix2d::~Matrix2d()
 	num_elements_ = 0;
 }
 
+Size Matrix2d::size() const
+{
+	return size_;
+}
+
+int Matrix2d::num_elements() const
+{
+	return num_elements_;
+}
+
 void Matrix2d::check_bounds_match(const Matrix2d& mat) const
 {
-	if (mat.max_x_ != max_x_)
+	if (mat.size_.x != size_.x)
 	{
-		std::cerr << "x dims do not match. Expected " << max_x_ << " but got " << mat.max_x_ << std::endl;
+		std::cerr << "x dims do not match. Expected " << size_.x << " but got " << mat.size_.x << std::endl;
 		throw std::runtime_error("Dim mismatch");
 	}
-	if (mat.max_y_ != max_y_)
+	if (mat.size_.y != size_.y)
 	{
 		// y dims to not match
-		std::cerr << "y dims do not match. Expected " << max_y_ << " but got " << mat.max_y_ << std::endl;
+		std::cerr << "y dims do not match. Expected " << size_.y << " but got " << mat.size_.y << std::endl;
 		throw std::runtime_error("Dim mismatch");
 	}
 }
@@ -254,9 +258,9 @@ Matrix2d Matrix2d::add(const Matrix2d& mat) const
 {
 	check_bounds_match(mat);
 
-	Matrix2d mat_result(max_y_, max_x_);
+	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_add, d_data_, mat.d_data_, mat_result.d_data_, max_x_, max_y_);
+	KERNEL_CALL(cuda_add, d_data_, mat.d_data_, mat_result.d_data_, size_.x, size_.y);
 
 	return mat_result;
 }
@@ -265,26 +269,26 @@ Matrix2d Matrix2d::sub(const Matrix2d& mat) const
 {
 	check_bounds_match(mat);
 
-	Matrix2d mat_result(max_y_, max_x_);
+	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_sub, d_data_, mat.d_data_, mat_result.d_data_, max_x_, max_y_);
+	KERNEL_CALL(cuda_sub, d_data_, mat.d_data_, mat_result.d_data_, size_.x, size_.y);
 
 	return mat_result;
 }
 
 Matrix2d Matrix2d::mul(const Matrix2d& mat) const
 {
-	if (max_x_ == mat.max_y_)
+	if (size_.x == mat.size_.y)
 	{
-		Matrix2d mat_result(max_y_, mat.max_x_);
+		Matrix2d mat_result({size_.y, mat.size_.x});
 
-		KERNEL_CALL(cuda_mat_mul, d_data_, mat.d_data_, mat_result.d_data_, mat.max_x_, max_y_, max_x_);
+		KERNEL_CALL(cuda_mat_mul, d_data_, mat.d_data_, mat_result.d_data_, mat.size_.x, size_.y, size_.x);
 
 		return mat_result;
 	}
 	else
 	{
-		std::cerr << "x dim of mat1 does not match y dim of mat2. Expected " << max_x_ << " but got " << mat.max_y_
+		std::cerr << "x dim of mat1 does not match y dim of mat2. Expected " << size_.x << " but got " << mat.size_.y
 							<< std::endl;
 		throw std::runtime_error("Dim mismatch");
 	}
@@ -292,27 +296,27 @@ Matrix2d Matrix2d::mul(const Matrix2d& mat) const
 
 Matrix2d Matrix2d::add(const float scalar) const
 {
-	Matrix2d mat_result(max_y_, max_x_);
+	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_add_scalar, d_data_, mat_result.d_data_, scalar, max_x_, max_y_);
+	KERNEL_CALL(cuda_add_scalar, d_data_, mat_result.d_data_, scalar, size_.x, size_.y);
 
 	return mat_result;
 }
 
 Matrix2d Matrix2d::sub(const float scalar) const
 {
-	Matrix2d mat_result(max_y_, max_x_);
+	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_sub_scalar, d_data_, mat_result.d_data_, scalar, max_x_, max_y_);
+	KERNEL_CALL(cuda_sub_scalar, d_data_, mat_result.d_data_, scalar, size_.x, size_.y);
 
 	return mat_result;
 }
 
 Matrix2d Matrix2d::mul(const float scalar) const
 {
-	Matrix2d mat_result(max_y_, max_x_);
+	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_mul_scalar, d_data_, mat_result.d_data_, scalar, max_x_, max_y_);
+	KERNEL_CALL(cuda_mul_scalar, d_data_, mat_result.d_data_, scalar, size_.x, size_.y);
 
 	return mat_result;
 }
@@ -326,7 +330,7 @@ Matrix2d& Matrix2d::operator+=(const Matrix2d& mat)
 {
 	check_bounds_match(mat);
 
-	KERNEL_CALL(cuda_add_self, d_data_, mat.d_data_, max_x_, max_y_);
+	KERNEL_CALL(cuda_add_self, d_data_, mat.d_data_, size_.x, size_.y);
 
 	return *this;
 }
@@ -340,7 +344,7 @@ Matrix2d& Matrix2d::operator-=(const Matrix2d& mat)
 {
 	check_bounds_match(mat);
 
-	KERNEL_CALL(cuda_sub_self, d_data_, mat.d_data_, max_x_, max_y_);
+	KERNEL_CALL(cuda_sub_self, d_data_, mat.d_data_, size_.x, size_.y);
 
 	return *this;
 }
@@ -354,7 +358,7 @@ Matrix2d& Matrix2d::operator*=(const Matrix2d& mat)
 {
 	check_bounds_match(mat);
 
-	KERNEL_CALL(cuda_mul_self, d_data_, mat.d_data_, max_x_, max_y_);
+	KERNEL_CALL(cuda_mul_self, d_data_, mat.d_data_, size_.x, size_.y);
 
 	return *this;
 }
@@ -366,7 +370,7 @@ Matrix2d Matrix2d::operator+(const float scalar) const
 
 Matrix2d& Matrix2d::operator+=(const float scalar)
 {
-	KERNEL_CALL(cuda_add_scalar_self, d_data_, scalar, max_x_, max_y_);
+	KERNEL_CALL(cuda_add_scalar_self, d_data_, scalar, size_.x, size_.y);
 
 	return *this;
 }
@@ -378,7 +382,7 @@ Matrix2d Matrix2d::operator-(const float scalar) const
 
 Matrix2d& Matrix2d::operator-=(const float scalar)
 {
-	KERNEL_CALL(cuda_sub_scalar_self, d_data_, scalar, max_x_, max_y_);
+	KERNEL_CALL(cuda_sub_scalar_self, d_data_, scalar, size_.x, size_.y);
 
 	return *this;
 }
@@ -390,7 +394,7 @@ Matrix2d Matrix2d::operator*(const float scalar) const
 
 Matrix2d& Matrix2d::operator*=(const float scalar)
 {
-	KERNEL_CALL(cuda_mul_scalar_self, d_data_, scalar, max_x_, max_y_);
+	KERNEL_CALL(cuda_mul_scalar_self, d_data_, scalar, size_.x, size_.y);
 
 	return *this;
 }
@@ -402,7 +406,7 @@ float Matrix2d::sum() const
 	const dim3 dim_block(threads_.x * threads_.y * threads_.z, 1, 1);
 	const dim3 dim_grid(blocks_.x * blocks_.y * blocks_.z, 1, 1);
 	const int smem_size = (dim_block.x <= 32) ? 2 * dim_block.x * sizeof(float) : dim_block.x * sizeof(float);
-	cuda_sum<<<dim_grid, dim_block, smem_size>>>(d_data_, d_sum, max_x_ * max_y_);
+	cuda_sum<<<dim_grid, dim_block, smem_size>>>(d_data_, d_sum, num_elements_);
 	cudaDeviceSynchronize();
 	CHECK_CUDA_ERROR(cudaGetLastError());
 	float sum = *d_sum;
@@ -413,7 +417,7 @@ float Matrix2d::sum() const
 float Matrix2d::get(int y, int x) const
 {
 	float element;
-	int i = max_x_ * y + x;
+	int i = size_.x * y + x;
 	CHECK_CUDA_ERROR(cudaMemcpy(&element, &(d_data_[i]), sizeof(float), cudaMemcpyDeviceToHost));
 	return element;
 }
@@ -426,12 +430,11 @@ std::vector<float> Matrix2d::get() const
 	return data;
 }
 
-void Matrix2d::set(const std::vector<float>& data, int y, int x)
+void Matrix2d::set(const std::vector<float>& data, Size size)
 {
-	assert(x > 0);
-	assert(y > 0);
-	max_x_ = x;
-	max_y_ = y;
+	assert(size.x > 0);
+	assert(size.y > 0);
+	size_ = size;
 	num_elements_ = static_cast<int>(data.size());
 	CHECK_CUDA_ERROR(cudaMemcpy(d_data_, data.data(), data.size() * sizeof(float), cudaMemcpyHostToDevice));
 	cudaDeviceSynchronize();

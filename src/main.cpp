@@ -12,9 +12,9 @@ int main(void)
 
 	spdlog::debug("Testing");
 
-	Matrix2d mat1({0, 1, 2, 3, 4, 5}, 3, 2);
-	Matrix2d mat2({6, 7, 8, 9, 10, 11}, 3, 2);
-	Matrix2d vec1({1, 2}, 2);
+	Matrix2d mat1({0, 1, 2, 3, 4, 5}, {3, 2});
+	Matrix2d mat2({6, 7, 8, 9, 10, 11}, {3, 2});
+	Matrix2d vec1({1, 2}, {2, 1});
 
 	auto mat3 = mat1 + mat2;
 	spdlog::debug("mat3: {}", fmt::join(mat3.get(), ","));
