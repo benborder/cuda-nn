@@ -1,9 +1,30 @@
 #include "helpers.h"
 #include "matrix2d.h"
 
+#include <cooperative_groups.h>
+#include <cooperative_groups/reduce.h>
+
 #include <cassert>
 #include <cstring>
 #include <iostream>
+
+namespace cg = cooperative_groups;
+
+template <class T>
+struct SharedMemory
+{
+	__device__ inline operator T*()
+	{
+		extern __shared__ int __smem[];
+		return (T*)__smem;
+	}
+
+	__device__ inline operator const T*() const
+	{
+		extern __shared__ int __smem[];
+		return (T*)__smem;
+	}
+};
 
 __global__ void cuda_add(float* mat1, float* mat2, float* mat3, int nx, int ny)
 {
@@ -123,6 +144,30 @@ __global__ void cuda_mul_scalar_self(float* mat, float scalar, int nx, int ny)
 	if ((x >= nx) || (y >= ny)) { return; }
 	const int i = nx * y + x;
 	mat[i] *= scalar;
+}
+
+__global__ void cuda_sum(float* mat, float* sum, int n)
+{
+	// Handle to thread block group
+	cg::thread_block cta = cg::this_thread_block();
+	float* s_data = SharedMemory<float>();
+
+	unsigned int tid = threadIdx.x;
+	unsigned int i = blockIdx.x * (blockDim.x * 2) + threadIdx.x;
+
+	float tsum = (i < n) ? mat[i] : 0.0F;
+	s_data[tid] = tsum;
+	cg::sync(cta);
+
+	// do reduction in shared mem
+	for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1)
+	{
+		if (tid < s) { s_data[tid] = tsum = tsum + s_data[tid + s]; }
+
+		cg::sync(cta);
+	}
+
+	if (tid == 0) { atomicAdd(sum, tsum); }
 }
 
 Matrix2d::Matrix2d(int y, int x) : max_x_(x), max_y_(y), num_elements_(x * y)
@@ -348,6 +393,21 @@ Matrix2d& Matrix2d::operator*=(const float scalar)
 	KERNEL_CALL(cuda_mul_scalar_self, d_data_, scalar, max_x_, max_y_);
 
 	return *this;
+}
+
+float Matrix2d::sum() const
+{
+	float* d_sum;
+	CHECK_CUDA_ERROR(cudaMallocManaged((void**)&d_sum, sizeof(float)));
+	const dim3 dim_block(threads_.x * threads_.y * threads_.z, 1, 1);
+	const dim3 dim_grid(blocks_.x * blocks_.y * blocks_.z, 1, 1);
+	const int smem_size = (dim_block.x <= 32) ? 2 * dim_block.x * sizeof(float) : dim_block.x * sizeof(float);
+	cuda_sum<<<dim_grid, dim_block, smem_size>>>(d_data_, d_sum, max_x_ * max_y_);
+	cudaDeviceSynchronize();
+	CHECK_CUDA_ERROR(cudaGetLastError());
+	float sum = *d_sum;
+	CHECK_CUDA_ERROR(cudaFree(d_sum));
+	return sum;
 }
 
 float Matrix2d::get(int y, int x) const

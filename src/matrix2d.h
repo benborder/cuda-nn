@@ -39,6 +39,8 @@ public:
 	Matrix2d& operator*=(const float scalar);
 	Matrix2d operator*(const float scalar) const;
 
+	float sum() const;
+
 	float get(int y, int x) const;
 	std::vector<float> get() const;
 

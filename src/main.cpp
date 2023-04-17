@@ -17,13 +17,17 @@ int main(void)
 	Matrix2d vec1({1, 2}, 2);
 
 	auto mat3 = mat1 + mat2;
+	spdlog::debug("mat3: {}", fmt::join(mat3.get(), ","));
 	mat3 += mat1;
+	spdlog::debug("mat3: {}", fmt::join(mat3.get(), ","));
 	mat3 -= mat1;
+	spdlog::debug("mat3: {}", fmt::join(mat3.get(), ","));
 	auto mat4 = (mat3 - mat2) * vec1;
+	spdlog::debug("mat4: {}={}", fmt::join(mat4.get(), "+"), mat4.sum());
+	mat4 += mat4.sum();
+	spdlog::debug("mat4: {}", fmt::join(mat4.get(), ","));
 
-	auto res = mat4.get();
-
-	spdlog::debug("Test complete: {}", fmt::join(res, ","));
+	spdlog::debug("Test complete!");
 
 	return 0;
 }
