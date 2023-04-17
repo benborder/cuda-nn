@@ -51,3 +51,18 @@ void check_and_throw_error(T result, const char* const func, const char* const f
 	func<<<blocks_, threads_>>>(__VA_ARGS__); \
 	cudaDeviceSynchronize();                  \
 	CHECK_CUDA_ERROR(cudaGetLastError());
+
+constexpr int isqrt(int s)
+{
+	if (s <= 1) { return s; }
+
+	int x0 = s / 2;
+	int x1 = (x0 + (s / x0)) / 2;
+
+	while (x1 < x0)
+	{
+		x0 = x1;
+		x1 = (x0 + s / x0) / 2;
+	}
+	return x0;
+}

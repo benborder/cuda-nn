@@ -31,7 +31,16 @@ int main(void)
 	mat5 = mat5 * mat4;
 	spdlog::debug("mat5: {}", fmt::join(mat5.get(), ","));
 
+	Matrix2d mat({1, 0, 0, 0, 1, 0, 0, 0, 1}, {3, 3});
+	Matrix2d vec({1, 2, 3}, {3, 1});
+
+	auto mm = mat * vec;
+	spdlog::debug("mm: {}", fmt::join(mm.get(), ","));
+
+	spdlog::debug("[mat3]T: {}", fmt::join(mat3.transpose().get(), ","));
+
 	spdlog::debug("Test complete!");
+
 
 	return 0;
 }
