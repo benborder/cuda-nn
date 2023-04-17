@@ -14,10 +14,14 @@ class Matrix2d
 {
 public:
 	Matrix2d(const std::vector<float>& data, Size size);
+	Matrix2d(Size size, float scalar);
 	Matrix2d(const Matrix2d& mat);
 	Matrix2d(Matrix2d&& mat);
 
 	~Matrix2d();
+
+	Matrix2d& operator=(const Matrix2d& mat);
+	Matrix2d& operator=(Matrix2d&& mat);
 
 	Size size() const;
 	int num_elements() const;
@@ -49,6 +53,8 @@ public:
 	Matrix2d operator*(const float scalar) const;
 
 	float sum() const;
+
+	void fill(float scalar);
 
 	float get(int y, int x) const;
 	std::vector<float> get() const;

@@ -26,6 +26,10 @@ int main(void)
 	spdlog::debug("mat4: {}={}", fmt::join(mat4.get(), "+"), mat4.sum());
 	mat4 += mat4.sum();
 	spdlog::debug("mat4: {}", fmt::join(mat4.get(), ","));
+	Matrix2d mat5({1, 3}, 2.0F);
+	spdlog::debug("mat5: {}", fmt::join(mat5.get(), ","));
+	mat5 = mat5 * mat4;
+	spdlog::debug("mat5: {}", fmt::join(mat5.get(), ","));
 
 	spdlog::debug("Test complete!");
 

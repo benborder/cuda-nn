@@ -77,7 +77,7 @@ __global__ void cuda_mul_self(float* mat1, float* mat2, int nx, int ny)
 	const int y = blockIdx.y * blockDim.y + threadIdx.y;
 	if ((x >= nx) || (y >= ny)) { return; }
 	const int i = nx * y + x;
-	mat2[i] *= mat1[i];
+	mat1[i] *= mat2[i];
 }
 
 __global__ void cuda_mat_mul(float* mat1, float* mat2, float* mat3, int nx, int ny, int m)
@@ -170,6 +170,14 @@ __global__ void cuda_sum(float* mat, float* sum, int n)
 	if (tid == 0) { atomicAdd(sum, tsum); }
 }
 
+__global__ void cuda_fill(float* mat, float scalar, int nx, int ny)
+{
+	const int x = blockIdx.x * blockDim.x + threadIdx.x;
+	const int y = blockIdx.y * blockDim.y + threadIdx.y;
+	if ((x >= nx) || (y >= ny)) { return; }
+	mat[nx * y + x] = scalar;
+}
+
 Matrix2d::Matrix2d(Size size) : size_(size), num_elements_(size_.x * size_.y)
 {
 	assert(size_.x > 0);
@@ -204,6 +212,18 @@ Matrix2d::Matrix2d(const std::vector<float>& data, Size size)
 	set(data, size);
 }
 
+Matrix2d::Matrix2d(Size size, float scalar) : size_(size), num_elements_(size_.x * size_.y)
+{
+	assert(size_.x > 0);
+	assert(size_.y > 0);
+	blocks_ = dim3(
+		std::min<unsigned int>(64, (size_.x + threads_.x - 1) / threads_.x),
+		std::min<unsigned int>(64, (size_.y + threads_.y - 1) / threads_.y));
+
+	CHECK_CUDA_ERROR(cudaMalloc(&d_data_, num_elements_ * sizeof(float)));
+	fill(scalar);
+}
+
 Matrix2d::Matrix2d(const Matrix2d& mat)
 		: size_(mat.size_), num_elements_(mat.num_elements_), blocks_(mat.blocks_), threads_(mat.threads_)
 {
@@ -227,6 +247,26 @@ Matrix2d::~Matrix2d()
 {
 	CHECK_CUDA_ERROR(cudaFree(d_data_));
 	num_elements_ = 0;
+}
+
+Matrix2d& Matrix2d::operator=(const Matrix2d& mat)
+{
+	check_bounds_match(mat);
+	assert(d_data_ != nullptr);
+	CHECK_CUDA_ERROR(cudaMemcpy(d_data_, mat.d_data_, num_elements_ * sizeof(float), cudaMemcpyDeviceToDevice));
+	return *this;
+}
+
+Matrix2d& Matrix2d::operator=(Matrix2d&& mat)
+{
+	size_ = mat.size_;
+	num_elements_ = mat.num_elements_;
+	blocks_ = mat.blocks_;
+	threads_ = mat.threads_;
+	CHECK_CUDA_ERROR(cudaFree(d_data_));
+	d_data_ = mat.d_data_;
+	mat.d_data_ = nullptr;
+	return *this;
 }
 
 Size Matrix2d::size() const
@@ -412,6 +452,11 @@ float Matrix2d::sum() const
 	float sum = *d_sum;
 	CHECK_CUDA_ERROR(cudaFree(d_sum));
 	return sum;
+}
+
+void Matrix2d::fill(float scalar)
+{
+	KERNEL_CALL(cuda_fill, d_data_, scalar, size_.x, size_.y);
 }
 
 float Matrix2d::get(int y, int x) const
