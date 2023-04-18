@@ -32,58 +32,46 @@ struct SharedMemory
 	}
 };
 
-__global__ void cuda_add(float* mat1, float* mat2, float* mat3, int nx, int ny)
+__global__ void cuda_add(float* mat1, float* mat2, float* mat3, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat3[i] = mat1[i] + mat2[i];
+	if (x >= n) { return; }
+	mat3[x] = mat1[x] + mat2[x];
 }
 
-__global__ void cuda_add_self(float* mat1, float* mat2, int nx, int ny)
+__global__ void cuda_add_self(float* mat1, float* mat2, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat1[i] += mat2[i];
+	if (x >= n) { return; }
+	mat1[x] += mat2[x];
 }
 
-__global__ void cuda_sub(float* mat1, float* mat2, float* mat3, int nx, int ny)
+__global__ void cuda_sub(float* mat1, float* mat2, float* mat3, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat3[i] = mat1[i] - mat2[i];
+	if (x >= n) { return; }
+	mat3[x] = mat1[x] - mat2[x];
 }
 
-__global__ void cuda_sub_self(float* mat1, float* mat2, int nx, int ny)
+__global__ void cuda_sub_self(float* mat1, float* mat2, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat1[i] -= mat2[i];
+	if (x >= n) { return; }
+	mat1[x] -= mat2[x];
 }
 
-__global__ void cuda_mul_cwise(float* mat1, float* mat2, float* mat3, int nx, int ny)
+__global__ void cuda_mul_cwise(float* mat1, float* mat2, float* mat3, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat3[i] = mat1[i] * mat2[i];
+	if (x >= n) { return; }
+	mat3[x] = mat1[x] * mat2[x];
 }
 
-__global__ void cuda_mul_cwise_self(float* mat1, float* mat2, int nx, int ny)
+__global__ void cuda_mul_cwise_self(float* mat1, float* mat2, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat1[i] *= mat2[i];
+	if (x >= n) { return; }
+	mat1[x] *= mat2[x];
 }
 
 __global__ void cuda_mat_mul(float* mat1, float* mat2, float* mat3, int nx, int ny, int m)
@@ -98,85 +86,67 @@ __global__ void cuda_mat_mul(float* mat1, float* mat2, float* mat3, int nx, int 
 	mat3[nx * y + x] = dot_prod;
 }
 
-__global__ void cuda_div_cwise(float* mat1, float* mat2, float* mat3, int nx, int ny)
+__global__ void cuda_div_cwise(float* mat1, float* mat2, float* mat3, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat3[i] = mat1[i] / mat2[i];
+	if (x >= n) { return; }
+	mat3[x] = mat1[x] / mat2[x];
 }
 
-__global__ void cuda_div_cwise_self(float* mat1, float* mat2, int nx, int ny)
+__global__ void cuda_div_cwise_self(float* mat1, float* mat2, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat1[i] /= mat2[i];
+	if (x >= n) { return; }
+	mat1[x] /= mat2[x];
 }
 
-__global__ void cuda_max_cwise(float* mat1, float* mat2, float* mat3, int nx, int ny)
+__global__ void cuda_max_cwise(float* mat1, float* mat2, float* mat3, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat3[i] = mat1[i] > mat2[i] ? mat1[i] : mat2[i];
+	if (x >= n) { return; }
+	mat3[x] = mat1[x] > mat2[x] ? mat1[x] : mat2[x];
 }
 
-__global__ void cuda_add_scalar(float* mat1, float* mat2, float scalar, int nx, int ny)
+__global__ void cuda_add_scalar(float* mat1, float* mat2, float scalar, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat2[i] = mat1[i] + scalar;
+	if (x >= n) { return; }
+	mat2[x] = mat1[x] + scalar;
 }
 
-__global__ void cuda_add_scalar_self(float* mat, float scalar, int nx, int ny)
+__global__ void cuda_add_scalar_self(float* mat, float scalar, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat[i] += scalar;
+	if (x >= n) { return; }
+	mat[x] += scalar;
 }
 
-__global__ void cuda_sub_scalar(float* mat1, float* mat2, float scalar, int nx, int ny)
+__global__ void cuda_sub_scalar(float* mat1, float* mat2, float scalar, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat2[i] = mat1[i] - scalar;
+	if (x >= n) { return; }
+	mat2[x] = mat1[x] - scalar;
 }
 
-__global__ void cuda_sub_scalar_self(float* mat, float scalar, int nx, int ny)
+__global__ void cuda_sub_scalar_self(float* mat, float scalar, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat[i] -= scalar;
+	if (x >= n) { return; }
+	mat[x] -= scalar;
 }
 
-__global__ void cuda_mul_scalar(float* mat1, float* mat2, float scalar, int nx, int ny)
+__global__ void cuda_mul_scalar(float* mat1, float* mat2, float scalar, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat2[i] = mat1[i] * scalar;
+	if (x >= n) { return; }
+	mat2[x] = mat1[x] * scalar;
 }
 
-__global__ void cuda_mul_scalar_self(float* mat, float scalar, int nx, int ny)
+__global__ void cuda_mul_scalar_self(float* mat, float scalar, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat[i] *= scalar;
+	if (x >= n) { return; }
+	mat[x] *= scalar;
 }
 
 __global__ void cuda_sum(float* mat, float* sum, int n)
@@ -203,57 +173,46 @@ __global__ void cuda_sum(float* mat, float* sum, int n)
 	if (tid == 0) { atomicAdd(sum, tsum); }
 }
 
-__global__ void cuda_fill(float* mat, float scalar, int nx, int ny)
+__global__ void cuda_fill(float* mat, float scalar, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	mat[nx * y + x] = scalar;
+	if (x >= n) { return; }
+	mat[x] = scalar;
 }
 
-__global__ void cuda_exp(float* mat1, float* mat2, int nx, int ny)
+__global__ void cuda_exp(float* mat1, float* mat2, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat2[i] = std::exp(mat1[i]);
+	if (x >= n) { return; }
+	mat2[x] = std::exp(mat1[x]);
 }
 
-__global__ void cuda_neg(float* mat1, float* mat2, int nx, int ny)
+__global__ void cuda_neg(float* mat1, float* mat2, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat2[i] = -mat1[i];
+	if (x >= n) { return; }
+	mat2[x] = -mat1[x];
 }
 
-__global__ void cuda_cwise_max(float* mat1, float* mat2, float scalar, int nx, int ny)
+__global__ void cuda_cwise_max(float* mat1, float* mat2, float scalar, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat2[i] = mat1[i] > scalar ? mat1[i] : scalar;
+	if (x >= n) { return; }
+	mat2[x] = mat1[x] > scalar ? mat1[x] : scalar;
 }
 
-__global__ void cuda_cwise_gt(float* mat1, float* mat2, float scalar, int nx, int ny)
+__global__ void cuda_cwise_gt(float* mat1, float* mat2, float scalar, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat2[i] = mat1[i] > scalar ? 1.0F : 0.0F;
+	if (x >= n) { return; }
+	mat2[x] = mat1[x] > scalar ? 1.0F : 0.0F;
 }
 
-__global__ void cuda_cwise_lt(float* mat1, float* mat2, float scalar, int nx, int ny)
+__global__ void cuda_cwise_lt(float* mat1, float* mat2, float scalar, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const int y = blockIdx.y * blockDim.y + threadIdx.y;
-	if ((x >= nx) || (y >= ny)) { return; }
-	const int i = nx * y + x;
-	mat2[i] = mat1[i] < scalar ? 1.0F : 0.0F;
+	if (x >= n) { return; }
+	mat2[x] = mat1[x] < scalar ? 1.0F : 0.0F;
 }
 
 __global__ void cuda_transpose(float* mat_in, float* mat_out, int nx, int ny)
@@ -396,7 +355,7 @@ Matrix2d Matrix2d::add(const Matrix2d& mat) const
 
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_add, d_data_, mat.d_data_, mat_result.d_data_, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_add, d_data_, mat.d_data_, mat_result.d_data_, num_elements_);
 
 	return mat_result;
 }
@@ -407,7 +366,7 @@ Matrix2d Matrix2d::sub(const Matrix2d& mat) const
 
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_sub, d_data_, mat.d_data_, mat_result.d_data_, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_sub, d_data_, mat.d_data_, mat_result.d_data_, num_elements_);
 
 	return mat_result;
 }
@@ -418,7 +377,7 @@ Matrix2d Matrix2d::mul(const Matrix2d& mat) const
 
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_mul_cwise, d_data_, mat.d_data_, mat_result.d_data_, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_mul_cwise, d_data_, mat.d_data_, mat_result.d_data_, num_elements_);
 
 	return mat_result;
 }
@@ -429,7 +388,7 @@ Matrix2d Matrix2d::mmul(const Matrix2d& mat) const
 	{
 		Matrix2d mat_result({size_.y, mat.size_.x});
 
-		KERNEL_CALL(cuda_mat_mul, d_data_, mat.d_data_, mat_result.d_data_, mat.size_.x, size_.y, size_.x);
+		KERNEL_CALL_2D(cuda_mat_mul, d_data_, mat.d_data_, mat_result.d_data_, mat.size_.x, size_.y, size_.x);
 
 		return mat_result;
 	}
@@ -447,7 +406,7 @@ Matrix2d Matrix2d::div(const Matrix2d& mat) const
 
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_div_cwise, d_data_, mat.d_data_, mat_result.d_data_, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_div_cwise, d_data_, mat.d_data_, mat_result.d_data_, num_elements_);
 
 	return mat_result;
 }
@@ -458,7 +417,7 @@ Matrix2d Matrix2d::max(const Matrix2d& mat) const
 
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_max_cwise, d_data_, mat.d_data_, mat_result.d_data_, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_max_cwise, d_data_, mat.d_data_, mat_result.d_data_, num_elements_);
 
 	return mat_result;
 }
@@ -467,7 +426,7 @@ Matrix2d Matrix2d::add(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_add_scalar, d_data_, mat_result.d_data_, scalar, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_add_scalar, d_data_, mat_result.d_data_, scalar, num_elements_);
 
 	return mat_result;
 }
@@ -476,7 +435,7 @@ Matrix2d Matrix2d::sub(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_sub_scalar, d_data_, mat_result.d_data_, scalar, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_sub_scalar, d_data_, mat_result.d_data_, scalar, num_elements_);
 
 	return mat_result;
 }
@@ -485,7 +444,7 @@ Matrix2d Matrix2d::mul(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_mul_scalar, d_data_, mat_result.d_data_, scalar, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_mul_scalar, d_data_, mat_result.d_data_, scalar, num_elements_);
 
 	return mat_result;
 }
@@ -494,7 +453,7 @@ Matrix2d Matrix2d::div(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_mul_scalar, d_data_, mat_result.d_data_, 1.0F / scalar, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_mul_scalar, d_data_, mat_result.d_data_, 1.0F / scalar, num_elements_);
 
 	return mat_result;
 }
@@ -503,7 +462,7 @@ Matrix2d Matrix2d::max(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_cwise_max, d_data_, mat_result.d_data_, scalar, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_cwise_max, d_data_, mat_result.d_data_, scalar, num_elements_);
 
 	return mat_result;
 }
@@ -512,7 +471,7 @@ Matrix2d Matrix2d::gt(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_cwise_gt, d_data_, mat_result.d_data_, scalar, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_cwise_gt, d_data_, mat_result.d_data_, scalar, num_elements_);
 
 	return mat_result;
 }
@@ -521,7 +480,7 @@ Matrix2d Matrix2d::lt(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_cwise_lt, d_data_, mat_result.d_data_, scalar, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_cwise_lt, d_data_, mat_result.d_data_, scalar, num_elements_);
 
 	return mat_result;
 }
@@ -535,7 +494,7 @@ Matrix2d& Matrix2d::operator+=(const Matrix2d& mat)
 {
 	check_bounds_match(mat);
 
-	KERNEL_CALL(cuda_add_self, d_data_, mat.d_data_, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_add_self, d_data_, mat.d_data_, num_elements_);
 
 	return *this;
 }
@@ -554,7 +513,7 @@ Matrix2d& Matrix2d::operator-=(const Matrix2d& mat)
 {
 	check_bounds_match(mat);
 
-	KERNEL_CALL(cuda_sub_self, d_data_, mat.d_data_, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_sub_self, d_data_, mat.d_data_, num_elements_);
 
 	return *this;
 }
@@ -568,7 +527,7 @@ Matrix2d& Matrix2d::operator*=(const Matrix2d& mat)
 {
 	check_bounds_match(mat);
 
-	KERNEL_CALL(cuda_mul_cwise_self, d_data_, mat.d_data_, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_mul_cwise_self, d_data_, mat.d_data_, num_elements_);
 
 	return *this;
 }
@@ -582,7 +541,7 @@ Matrix2d& Matrix2d::operator/=(const Matrix2d& mat)
 {
 	check_bounds_match(mat);
 
-	KERNEL_CALL(cuda_div_cwise_self, d_data_, mat.d_data_, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_div_cwise_self, d_data_, mat.d_data_, num_elements_);
 
 	return *this;
 }
@@ -594,7 +553,7 @@ Matrix2d Matrix2d::operator+(const float scalar) const
 
 Matrix2d& Matrix2d::operator+=(const float scalar)
 {
-	KERNEL_CALL(cuda_add_scalar_self, d_data_, scalar, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_add_scalar_self, d_data_, scalar, num_elements_);
 
 	return *this;
 }
@@ -606,7 +565,7 @@ Matrix2d Matrix2d::operator-(const float scalar) const
 
 Matrix2d& Matrix2d::operator-=(const float scalar)
 {
-	KERNEL_CALL(cuda_sub_scalar_self, d_data_, scalar, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_sub_scalar_self, d_data_, scalar, num_elements_);
 
 	return *this;
 }
@@ -618,7 +577,7 @@ Matrix2d Matrix2d::operator*(const float scalar) const
 
 Matrix2d& Matrix2d::operator*=(const float scalar)
 {
-	KERNEL_CALL(cuda_mul_scalar_self, d_data_, scalar, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_mul_scalar_self, d_data_, scalar, num_elements_);
 
 	return *this;
 }
@@ -630,7 +589,7 @@ Matrix2d Matrix2d::operator/(const float scalar) const
 
 Matrix2d& Matrix2d::operator/=(const float scalar)
 {
-	KERNEL_CALL(cuda_mul_scalar_self, d_data_, 1.0F / scalar, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_mul_scalar_self, d_data_, 1.0F / scalar, num_elements_);
 
 	return *this;
 }
@@ -664,21 +623,21 @@ Matrix2d Matrix2d::transpose() const
 {
 	Matrix2d mat_result({size_.x, size_.y});
 
-	KERNEL_CALL(cuda_transpose, d_data_, mat_result.d_data_, size_.x, size_.y);
+	KERNEL_CALL_2D(cuda_transpose, d_data_, mat_result.d_data_, size_.x, size_.y);
 
 	return mat_result;
 }
 
 void Matrix2d::fill(float scalar)
 {
-	KERNEL_CALL(cuda_fill, d_data_, scalar, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_fill, d_data_, scalar, num_elements_);
 }
 
 Matrix2d Matrix2d::exp() const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_exp, d_data_, mat_result.d_data_, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_exp, d_data_, mat_result.d_data_, num_elements_);
 
 	return mat_result;
 }
@@ -687,7 +646,7 @@ Matrix2d Matrix2d::neg() const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL(cuda_neg, d_data_, mat_result.d_data_, size_.x, size_.y);
+	KERNEL_CALL_1D(cuda_neg, d_data_, mat_result.d_data_, num_elements_);
 
 	return mat_result;
 }

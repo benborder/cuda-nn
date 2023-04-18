@@ -47,9 +47,14 @@ void check_and_throw_error(T result, const char* const func, const char* const f
 	func<<<1, 1>>>(__VA_ARGS__);     \
 	cudaDeviceSynchronize();         \
 	CHECK_CUDA_ERROR(cudaGetLastError());
-#define KERNEL_CALL(func, ...)              \
+#define KERNEL_CALL_2D(func, ...)           \
 	func<<<blocks_, threads_>>>(__VA_ARGS__); \
 	cudaDeviceSynchronize();                  \
+	CHECK_CUDA_ERROR(cudaGetLastError());
+
+#define KERNEL_CALL_1D(func, ...)                                                                 \
+	func<<<blocks_.x * blocks_.y * blocks_.z, threads_.x * threads_.y * threads_.z>>>(__VA_ARGS__); \
+	cudaDeviceSynchronize();                                                                        \
 	CHECK_CUDA_ERROR(cudaGetLastError());
 
 constexpr int isqrt(int s)
