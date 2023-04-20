@@ -26,6 +26,8 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)  # Set -pthreads
 find_package(Threads REQUIRED)
 find_package(CUDAToolkit)
 
+add_subdirectory(src/mnist)
+
 # ----------------------------------------------------------------------------
 # Building
 # ----------------------------------------------------------------------------
@@ -52,4 +54,5 @@ PUBLIC
 	spdlog::spdlog
 	CUDA::cudart_static
 	CUDA::cuda_driver
+	mnist
 )
