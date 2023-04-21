@@ -198,7 +198,7 @@ __global__ void cuda_cwise_max(float* mat1, float* mat2, float scalar, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
 	if (x >= n) { return; }
-	mat2[x] = mat1[x] > scalar ? mat1[x] : scalar;
+	if (scalar > mat1[x]) { mat2[x] = scalar; }
 }
 
 __global__ void cuda_cwise_gt(float* mat1, float* mat2, float scalar, int n)
@@ -384,20 +384,18 @@ Matrix2d Matrix2d::mul(const Matrix2d& mat) const
 
 Matrix2d Matrix2d::mmul(const Matrix2d& mat) const
 {
-	if (size_.x == mat.size_.y)
-	{
-		Matrix2d mat_result({size_.y, mat.size_.x});
-
-		KERNEL_CALL_2D(cuda_mat_mul, d_data_, mat.d_data_, mat_result.d_data_, mat.size_.x, size_.y, size_.x);
-
-		return mat_result;
-	}
-	else
+	if (size_.x != mat.size_.y)
 	{
 		std::cerr << "x dim of mat1 does not match y dim of mat2. Expected " << size_.x << " but got " << mat.size_.y
 							<< std::endl;
 		throw std::runtime_error("Dim mismatch");
 	}
+
+	Matrix2d mat_result({size_.y, mat.size_.x});
+
+	KERNEL_CALL_2D(cuda_mat_mul, d_data_, mat.d_data_, mat_result.d_data_, mat.size_.x, size_.y, size_.x);
+
+	return mat_result;
 }
 
 Matrix2d Matrix2d::div(const Matrix2d& mat) const
@@ -628,6 +626,13 @@ Matrix2d Matrix2d::transpose() const
 	return mat_result;
 }
 
+Matrix2d& Matrix2d::flatten()
+{
+	size_ = Size{size_.x * size_.y, 1};
+
+	return *this;
+}
+
 void Matrix2d::fill(float scalar)
 {
 	KERNEL_CALL_1D(cuda_fill, d_data_, scalar, num_elements_);
@@ -676,11 +681,4 @@ void Matrix2d::set(const std::vector<float>& data, Size size)
 	CHECK_CUDA_ERROR(cudaMemcpy(d_data_, data.data(), data.size() * sizeof(float), cudaMemcpyHostToDevice));
 	cudaDeviceSynchronize();
 	CHECK_CUDA_ERROR(cudaGetLastError());
-}
-
-float mse(const Matrix2d& prediction, const Matrix2d& target)
-{
-	auto error = target - prediction;
-	error *= error;
-	return error.sum() / static_cast<float>(error.num_elements());
 }

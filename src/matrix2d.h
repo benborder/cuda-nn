@@ -75,6 +75,7 @@ public:
 	Matrix2d exp() const;
 	Matrix2d neg() const;
 	Matrix2d transpose() const;
+	Matrix2d& flatten();
 
 	void fill(float scalar);
 
@@ -115,4 +116,8 @@ inline Matrix2d operator/(float scalar, const Matrix2d& mat)
 	return mat.div(scalar);
 }
 
-float mse(const Matrix2d& prediction, const Matrix2d& target);
+inline Matrix2d flatten(const Matrix2d& mat)
+{
+	auto flattened = mat;
+	return flattened.flatten();
+}
