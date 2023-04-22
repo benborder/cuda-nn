@@ -22,7 +22,7 @@ Matrix2d initialise(Size size, InitType type, float value)
 		case InitType::kNormal:
 		{
 			static std::mt19937 gen(std::random_device{}());
-			std::normal_distribution<float> rnd(value);
+			std::normal_distribution<float> rnd(0.0F, value);
 			Matrix2d mat(size);
 			std::vector<float> vec;
 			vec.resize(mat.num_elements());

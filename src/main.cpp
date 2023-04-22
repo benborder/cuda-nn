@@ -27,47 +27,78 @@ int main(void)
 	spdlog::set_level(spdlog::level::debug);
 	spdlog::set_pattern("[%^%l%$] %v");
 
+	// Network parameters
 	FCConfig config;
 	config.layers = {
-		{512, Activation::kReLU, InitType::kNormal, 0.0F},
-		{256, Activation::kReLU, InitType::kNormal, 0.0F},
-		{64, Activation::kReLU, InitType::kNormal, 0.0F},
-		{MNISTObject::nlabels, Activation::kReLU, InitType::kNormal, 0.0F}};
+		{512, Activation::kReLU},
+		{256, Activation::kReLU},
+		{64, Activation::kReLU},
+		{MNISTObject::nlabels, Activation::kSigmoid}};
 
 	FullyConnected fc_nn(config, MNISTObject::cols * MNISTObject::rows);
 
 	MNISTDatasetLoader mnist_loader("./mnist");
 
 	auto train_set = mnist_loader.load_train_set();
-	if (!train_set.empty()) { spdlog::debug("MNIST loaded!"); }
-	size_t mini_batch_size = 10;
-	size_t num_epoch = 30;
+	if (train_set.empty()) { return 1; }
+
+	auto test_set = mnist_loader.load_test_set();
+	if (test_set.empty()) { return 1; }
+
+	// Training Hyperparameters
+	const size_t mini_batch_size = 10;
+	const size_t num_epoch = 30;
+	const float lr = 3.0F;
 
 	std::mt19937 gen(std::random_device{}());
 
 	for (size_t epoch = 0; epoch < num_epoch; ++epoch)
 	{
+		fc_nn.train();
+		fc_nn.set_alpha(lr * (1.0F - static_cast<float>(epoch) / static_cast<float>(num_epoch)));
 		std::shuffle(train_set.begin(), train_set.end(), gen);
 		for (size_t index = 0; index < train_set.size(); index += mini_batch_size)
 		{
+			std::vector<Matrix2d> grad;
 			float mean_loss = 0;
 			for (size_t mini_batch = 0; mini_batch < mini_batch_size; ++mini_batch)
 			{
 				const auto& item = train_set.at(index + mini_batch);
 				auto pred = fc_nn.forward(to_mat(item).flatten());
 				auto target = make_target(item);
+				auto g = loss_squared_derivative(pred, target);
+				grad.push_back(g);
 				float loss = loss_squared(pred, target);
-				if (isnanf(loss))
-				{
-					spdlog::error("pred: {}", fmt::join(pred.get(), ","));
-					spdlog::error("targ: {}", fmt::join(target.get(), ","));
-				}
 				mean_loss += loss;
 			}
 			mean_loss /= mini_batch_size;
-			if (index % (mini_batch_size * 10) == 0) { spdlog::debug("mean_loss: {}", mean_loss); }
+			fc_nn.backprop(grad);
+			if (index % (mini_batch_size * 100) == 0 && index > 0)
+			{
+				spdlog::info("[{} / {}] [{} / {}] loss: {}", epoch, num_epoch, index, train_set.size(), mean_loss);
+			}
 		}
-		spdlog::info("epoch {} complete", epoch);
+
+		int num_correct = 0;
+		fc_nn.train(false);
+		for (const auto& item : test_set)
+		{
+			auto pred = fc_nn.forward(to_mat(item).flatten());
+			int pred_label = 0;
+			auto pred_vec = pred.get();
+			float max = -1.0F;
+			for (size_t i = 0; i < pred_vec.size(); ++i)
+			{
+				if (pred_vec[i] > max)
+				{
+					max = pred_vec[i];
+					pred_label = static_cast<int>(i);
+				}
+			}
+			if (pred_label == item.label) { ++num_correct; }
+		}
+		float accuracy = 100.0F * static_cast<float>(num_correct) / static_cast<float>(test_set.size());
+		spdlog::info("epoch {} complete, accuracy; {}%", epoch, accuracy);
 	}
 
 	return 0;

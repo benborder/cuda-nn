@@ -3,6 +3,8 @@
 #include "initialise.h"
 #include "matrix2d.h"
 
+#include <tuple>
+
 struct LinearConfig
 {
 	// The number of neural units in a layer
@@ -10,9 +12,9 @@ struct LinearConfig
 	// The activation function used for forward passes
 	Activation activation = Activation::kNone;
 	// The type of initialisation for the weights
-	InitType init_weight_type = InitType::kConstant;
+	InitType init_weight_type = InitType::kNormal;
 	// The weight values to initialise the network with (if relevant)
-	float init_weight = 0.0F;
+	float init_weight = 1.0F;
 	// The type of initialisation for the bias
 	InitType init_bias_type = InitType::kConstant;
 	// The bias values to initialise the network with
@@ -29,6 +31,10 @@ public:
 	{
 	}
 
+	void train(bool enable = true) { train_ = enable; }
+
+	void set_alpha(float alpha) { alpha_ = alpha; }
+
 	Matrix2d forward(const Matrix2d& input)
 	{
 		auto output = weights_ * input + bias_;
@@ -39,8 +45,32 @@ public:
 
 	Matrix2d operator()(const Matrix2d& input) { return forward(input); }
 
+	std::vector<Matrix2d> backprop(const std::vector<Matrix2d>& grad_in)
+	{
+		std::vector<Matrix2d> grad_out;
+		Matrix2d weight_grad(weights_.size(), 0.0F);
+		Matrix2d bias_grad(bias_.size(), 0.0F);
+		for (size_t b = 0; b < batch_output_.size(); ++b)
+		{
+			const auto& [a, z] = batch_output_[b];
+			auto grad = grad_in.at(b).mul(activation_derivative(config_.activation, z));
+			bias_grad += grad;
+			weight_grad += grad * a.transpose();
+			grad_out.push_back(weights_.transpose() * grad);
+		}
+		// Update weights and bias
+		float scale = alpha_ / static_cast<float>(batch_output_.size());
+		bias_ -= bias_grad * scale;
+		weights_ -= weight_grad * scale;
+		batch_output_.clear();
+		return grad_out;
+	}
+
 private:
 	const LinearConfig config_;
 	Matrix2d weights_;
 	Matrix2d bias_;
+	bool train_ = false;
+	float alpha_ = 1.0F;
+	std::vector<std::tuple<Matrix2d, Matrix2d>> batch_output_;
 };

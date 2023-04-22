@@ -26,6 +26,18 @@ public:
 		}
 	}
 
+	void train(bool enable = true)
+	{
+		train_ = enable;
+		for (auto& layer : layers_) { layer.train(enable); }
+	}
+
+	void set_alpha(float alpha)
+	{
+		alpha_ = alpha;
+		for (auto& layer : layers_) { layer.set_alpha(alpha); }
+	}
+
 	Matrix2d forward(const Matrix2d& input)
 	{
 		Matrix2d output = input;
@@ -33,15 +45,29 @@ public:
 		return output;
 	}
 
+	std::vector<Matrix2d> backprop(std::vector<Matrix2d> grad)
+	{
+		for (int l = static_cast<int>(layers_.size()) - 1; l >= 0; --l) { grad = layers_.at(l).backprop(grad); }
+
+		return grad;
+	}
+
 private:
 	const FCConfig config_;
 	std::vector<Linear> layers_;
 	int output_size_;
+	bool train_ = false;
+	float alpha_ = 1.0F;
 };
 
 float loss_squared(const Matrix2d& prediction, const Matrix2d& target)
 {
-	auto error = target - prediction;
+	auto error = prediction - target;
 	error *= error;
 	return 0.5F * error.sum();
+}
+
+Matrix2d loss_squared_derivative(const Matrix2d& prediction, const Matrix2d& target)
+{
+	return prediction - target;
 }
