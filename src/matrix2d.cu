@@ -149,6 +149,20 @@ __global__ void cuda_mul_scalar_self(float* mat, float scalar, int n)
 	mat[x] *= scalar;
 }
 
+__global__ void cuda_invert_scalar(float* mat1, float* mat2, float scalar, int n)
+{
+	const int x = blockIdx.x * blockDim.x + threadIdx.x;
+	if (x >= n) { return; }
+	mat2[x] = scalar / mat1[x];
+}
+
+__global__ void cuda_scalar_sub(float* mat1, float* mat2, float scalar, int n)
+{
+	const int x = blockIdx.x * blockDim.x + threadIdx.x;
+	if (x >= n) { return; }
+	mat2[x] = scalar - mat1[x];
+}
+
 __global__ void cuda_sum(float* mat, float* sum, int n)
 {
 	// Handle to thread block group
@@ -173,11 +187,35 @@ __global__ void cuda_sum(float* mat, float* sum, int n)
 	if (tid == 0) { atomicAdd(sum, tsum); }
 }
 
+__global__ void cuda_isnan(float* mat, bool* is_nan, int n)
+{
+	const int x = blockIdx.x * blockDim.x + threadIdx.x;
+	if (x >= n) { return; }
+	// We dont care about race conditions as any write is going to be true
+	if (isnan(mat[x])) { *is_nan = true; }
+}
+
+__global__ void cuda_isinf(float* mat, bool* is_inf, int n)
+{
+	const int x = blockIdx.x * blockDim.x + threadIdx.x;
+	if (x >= n) { return; }
+	// We dont care about race conditions as any write is going to be true
+	if (isinf(mat[x])) { *is_inf = true; }
+}
+
 __global__ void cuda_fill(float* mat, float scalar, int n)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
 	if (x >= n) { return; }
 	mat[x] = scalar;
+}
+
+__global__ void cuda_eye(float* mat1, int nx, int ny)
+{
+	const int x = blockIdx.x * blockDim.x + threadIdx.x;
+	const int y = blockIdx.y * blockDim.y + threadIdx.y;
+	if ((x >= nx) || (y >= ny)) { return; }
+	mat1[nx * y + x] = x == y ? 1.0F : 0.0F;
 }
 
 __global__ void cuda_exp(float* mat1, float* mat2, int n)
@@ -483,6 +521,15 @@ Matrix2d Matrix2d::lt(const float scalar) const
 	return mat_result;
 }
 
+Matrix2d Matrix2d::inv(const float scalar) const
+{
+	Matrix2d mat_result(size_);
+
+	KERNEL_CALL_1D(cuda_invert_scalar, d_data_, mat_result.d_data_, scalar, num_elements_);
+
+	return mat_result;
+}
+
 Matrix2d Matrix2d::operator+(const Matrix2d& mat) const
 {
 	return add(mat);
@@ -602,6 +649,20 @@ Matrix2d Matrix2d::operator<(const float scalar) const
 	return lt(scalar);
 }
 
+Matrix2d operator-(float scalar, const Matrix2d& mat)
+{
+	Matrix2d mat_result(mat.size_);
+
+	const dim3 dim_block(mat.threads_.x * mat.threads_.y * mat.threads_.z, 1, 1);
+	const dim3 dim_grid(mat.blocks_.x * mat.blocks_.y * mat.blocks_.z, 1, 1);
+	cuda_scalar_sub<<<dim_block, dim_grid>>>(mat.d_data_, mat_result.d_data_, scalar, mat.num_elements_);
+	cudaDeviceSynchronize();
+	CHECK_CUDA_ERROR(cudaGetLastError());
+
+	return mat_result;
+	return mat.neg() + scalar;
+}
+
 float Matrix2d::sum() const
 {
 	float* d_sum;
@@ -631,6 +692,30 @@ Matrix2d& Matrix2d::flatten()
 	size_ = Size{size_.x * size_.y, 1};
 
 	return *this;
+}
+
+bool Matrix2d::isnan() const
+{
+	bool* d_is_nan;
+	CHECK_CUDA_ERROR(cudaMallocManaged((void**)&d_is_nan, sizeof(bool)));
+	*d_is_nan = false;
+	cudaDeviceSynchronize();
+	KERNEL_CALL_1D(cuda_isnan, d_data_, d_is_nan, num_elements_);
+	bool is_nan = *d_is_nan;
+	CHECK_CUDA_ERROR(cudaFree(d_is_nan));
+	return is_nan;
+}
+
+bool Matrix2d::isinf() const
+{
+	bool* d_is_inf;
+	CHECK_CUDA_ERROR(cudaMallocManaged((void**)&d_is_inf, sizeof(bool)));
+	*d_is_inf = false;
+	cudaDeviceSynchronize();
+	KERNEL_CALL_1D(cuda_isinf, d_data_, d_is_inf, num_elements_);
+	bool is_inf = *d_is_inf;
+	CHECK_CUDA_ERROR(cudaFree(d_is_inf));
+	return is_inf;
 }
 
 void Matrix2d::fill(float scalar)
@@ -681,4 +766,13 @@ void Matrix2d::set(const std::vector<float>& data, Size size)
 	CHECK_CUDA_ERROR(cudaMemcpy(d_data_, data.data(), data.size() * sizeof(float), cudaMemcpyHostToDevice));
 	cudaDeviceSynchronize();
 	CHECK_CUDA_ERROR(cudaGetLastError());
+}
+
+Matrix2d eye(Size size)
+{
+	Matrix2d mat(size);
+	cuda_eye<<<mat.blocks_, mat.threads_>>>(mat.d_data_, mat.size_.x, mat.size_.y);
+	cudaDeviceSynchronize();
+	CHECK_CUDA_ERROR(cudaGetLastError());
+	return mat;
 }

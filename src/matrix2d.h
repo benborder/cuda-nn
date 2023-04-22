@@ -42,6 +42,7 @@ public:
 	Matrix2d max(const float scalar) const;
 	Matrix2d gt(const float scalar) const;
 	Matrix2d lt(const float scalar) const;
+	Matrix2d inv(const float scalar = 1.0F) const;
 
 	Matrix2d& operator+=(const Matrix2d& mat);
 	Matrix2d operator+(const Matrix2d& mat) const;
@@ -71,11 +72,16 @@ public:
 	Matrix2d operator>(const float scalar) const;
 	Matrix2d operator<(const float scalar) const;
 
+	friend Matrix2d operator-(float scalar, const Matrix2d& mat);
+
 	float sum() const;
 	Matrix2d exp() const;
 	Matrix2d neg() const;
 	Matrix2d transpose() const;
 	Matrix2d& flatten();
+	bool isnan() const;
+	bool isinf() const;
+	friend Matrix2d eye(Size size);
 
 	void fill(float scalar);
 
@@ -96,14 +102,11 @@ private:
 	dim3 threads_;
 };
 
+Matrix2d operator-(float scalar, const Matrix2d& mat);
+
 inline Matrix2d operator+(float scalar, const Matrix2d& mat)
 {
 	return mat.add(scalar);
-}
-
-inline Matrix2d operator-(float scalar, const Matrix2d& mat)
-{
-	return mat.sub(scalar);
 }
 
 inline Matrix2d operator*(float scalar, const Matrix2d& mat)
@@ -113,7 +116,7 @@ inline Matrix2d operator*(float scalar, const Matrix2d& mat)
 
 inline Matrix2d operator/(float scalar, const Matrix2d& mat)
 {
-	return mat.div(scalar);
+	return mat.inv(scalar);
 }
 
 inline Matrix2d flatten(const Matrix2d& mat)
@@ -121,3 +124,5 @@ inline Matrix2d flatten(const Matrix2d& mat)
 	auto flattened = mat;
 	return flattened.flatten();
 }
+
+Matrix2d eye(Size size);
