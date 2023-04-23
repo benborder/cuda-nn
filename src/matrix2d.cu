@@ -13,7 +13,6 @@ namespace cg = cooperative_groups;
 namespace
 {
 constexpr int ktile_dim = 16;
-constexpr int kmax_threads = 4096;
 } // namespace
 
 template <class T>
@@ -335,11 +334,8 @@ Matrix2d::~Matrix2d()
 
 void Matrix2d::set_block_thread_size()
 {
-	constexpr int kmax_blocks = isqrt(kmax_threads / (ktile_dim * ktile_dim));
 	threads_ = dim3(ktile_dim, ktile_dim);
-	blocks_ = dim3(
-		std::min<unsigned int>(kmax_blocks, (size_.x + threads_.x - 1) / threads_.x),
-		std::min<unsigned int>(kmax_blocks, (size_.y + threads_.y - 1) / threads_.y));
+	blocks_ = dim3((size_.x + threads_.x - 1) / threads_.x, (size_.y + threads_.y - 1) / threads_.y);
 }
 
 Matrix2d& Matrix2d::operator=(const Matrix2d& mat)
@@ -431,7 +427,10 @@ Matrix2d Matrix2d::mmul(const Matrix2d& mat) const
 
 	Matrix2d mat_result({size_.y, mat.size_.x});
 
-	KERNEL_CALL_2D(cuda_mat_mul, d_data_, mat.d_data_, mat_result.d_data_, mat.size_.x, size_.y, size_.x);
+	cuda_mat_mul<<<mat_result.blocks_, mat_result.threads_>>>(
+		d_data_, mat.d_data_, mat_result.d_data_, mat.size_.x, size_.y, size_.x);
+	cudaDeviceSynchronize();
+	CHECK_CUDA_ERROR(cudaGetLastError());
 
 	return mat_result;
 }
