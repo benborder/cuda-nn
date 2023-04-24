@@ -12,7 +12,7 @@ struct LinearConfig
 	// The activation function used for forward passes
 	Activation activation = Activation::kNone;
 	// The type of initialisation for the weights
-	InitType init_weight_type = InitType::kNormal;
+	InitType init_weight_type = InitType::kKaimingNormal;
 	// The weight values to initialise the network with (if relevant)
 	float init_weight = 1.0F;
 	// The type of initialisation for the bias
