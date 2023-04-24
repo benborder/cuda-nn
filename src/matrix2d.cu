@@ -5,8 +5,10 @@
 #include <cooperative_groups/reduce.h>
 
 #include <cassert>
+#include <cmath>
 #include <cstring>
 #include <iostream>
+#include <stdexcept>
 
 namespace cg = cooperative_groups;
 
@@ -172,6 +174,30 @@ __global__ void cuda_sum(float* mat, float* sum, int n)
 	unsigned int i = blockIdx.x * (blockDim.x * 2) + threadIdx.x;
 
 	float tsum = (i < n) ? mat[i] : 0.0F;
+	s_data[tid] = tsum;
+	cg::sync(cta);
+
+	// do reduction in shared mem
+	for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1)
+	{
+		if (tid < s) { s_data[tid] = tsum = tsum + s_data[tid + s]; }
+
+		cg::sync(cta);
+	}
+
+	if (tid == 0) { atomicAdd(sum, tsum); }
+}
+
+__global__ void cuda_norm_len(float* mat, float* sum, int n)
+{
+	// Handle to thread block group
+	cg::thread_block cta = cg::this_thread_block();
+	float* s_data = SharedMemory<float>();
+
+	unsigned int tid = threadIdx.x;
+	unsigned int i = blockIdx.x * (blockDim.x * 2) + threadIdx.x;
+
+	float tsum = (i < n) ? mat[i] * mat[i] : 0.0F;
 	s_data[tid] = tsum;
 	cg::sync(cta);
 
@@ -675,6 +701,27 @@ float Matrix2d::sum() const
 	float sum = *d_sum;
 	CHECK_CUDA_ERROR(cudaFree(d_sum));
 	return sum;
+}
+
+float Matrix2d::mag() const
+{
+	float* d_norm_len;
+	CHECK_CUDA_ERROR(cudaMallocManaged((void**)&d_norm_len, sizeof(float)));
+	const dim3 dim_block(threads_.x * threads_.y * threads_.z, 1, 1);
+	const dim3 dim_grid(blocks_.x * blocks_.y * blocks_.z, 1, 1);
+	const int smem_size = (dim_block.x <= 32) ? 2 * dim_block.x * sizeof(float) : dim_block.x * sizeof(float);
+	cuda_sum<<<dim_grid, dim_block, smem_size>>>(d_data_, d_norm_len, num_elements_);
+	cudaDeviceSynchronize();
+	CHECK_CUDA_ERROR(cudaGetLastError());
+	float mag = *d_norm_len;
+	CHECK_CUDA_ERROR(cudaFree(d_norm_len));
+	if (std::isnan(mag)) { throw std::runtime_error("NAN"); }
+	return std::sqrt(mag);
+}
+
+Matrix2d Matrix2d::norm() const
+{
+	return mul(1.0F / mag());
 }
 
 Matrix2d Matrix2d::transpose() const

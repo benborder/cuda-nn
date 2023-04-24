@@ -75,6 +75,8 @@ public:
 	friend Matrix2d operator-(float scalar, const Matrix2d& mat);
 
 	float sum() const;
+	float mag() const;
+	Matrix2d norm() const;
 	Matrix2d exp() const;
 	Matrix2d neg() const;
 	Matrix2d transpose() const;

@@ -21,4 +21,8 @@ inline Matrix2d tanh(const Matrix2d& mat)
 	return (ex - enx) / (ex + enx);
 }
 
-// TODO: argmax
+inline void clip_norm(Matrix2d& mat, float clip)
+{
+	float mag = mat.mag();
+	if (mag > clip) { mat *= clip / mag; }
+}

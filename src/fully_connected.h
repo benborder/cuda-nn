@@ -38,6 +38,11 @@ public:
 		for (auto& layer : layers_) { layer.set_alpha(alpha); }
 	}
 
+	void set_grad_norm_clip(float clip)
+	{
+		for (auto& layer : layers_) { layer.set_grad_norm_clip(clip); }
+	}
+
 	Matrix2d forward(const Matrix2d& input)
 	{
 		Matrix2d output = input;

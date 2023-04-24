@@ -46,9 +46,12 @@ int main(void)
 	if (test_set.empty()) { return 1; }
 
 	// Training Hyperparameters
-	const size_t mini_batch_size = 10;
-	const size_t num_epoch = 30;
-	const float lr = 3.0F;
+	constexpr size_t mini_batch_size = 10;
+	constexpr size_t num_epoch = 30;
+	constexpr float lr = 0.001F;
+	constexpr float grad_norm_clip = 0.5F;
+
+	fc_nn.set_grad_norm_clip(grad_norm_clip);
 
 	std::mt19937 gen(std::random_device{}());
 

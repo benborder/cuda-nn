@@ -35,6 +35,8 @@ public:
 
 	void set_alpha(float alpha) { alpha_ = alpha; }
 
+	void set_grad_norm_clip(float clip) { grad_norm_clip_ = clip; }
+
 	Matrix2d forward(const Matrix2d& input)
 	{
 		auto output = weights_ * input + bias_;
@@ -60,8 +62,12 @@ public:
 		}
 		// Update weights and bias
 		float scale = alpha_ / static_cast<float>(batch_output_.size());
-		bias_ -= bias_grad * scale;
-		weights_ -= weight_grad * scale;
+		bias_grad *= scale;
+		weight_grad *= scale;
+		clip_norm(bias_grad, grad_norm_clip_);
+		clip_norm(weight_grad, grad_norm_clip_);
+		bias_ -= bias_grad;
+		weights_ -= weight_grad;
 		batch_output_.clear();
 		return grad_out;
 	}
@@ -72,5 +78,6 @@ private:
 	Matrix2d bias_;
 	bool train_ = false;
 	float alpha_ = 1.0F;
+	float grad_norm_clip_ = 0.5F;
 	std::vector<std::tuple<Matrix2d, Matrix2d>> batch_output_;
 };
