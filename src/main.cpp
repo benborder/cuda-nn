@@ -2,6 +2,7 @@
 #include "functions.h"
 #include "matrix2d.h"
 #include "mnist/mnist.h"
+#include "optimiser.h"
 
 #include <spdlog/spdlog.h>
 
@@ -30,10 +31,7 @@ int main(void)
 	// Network parameters
 	FCConfig config;
 	config.layers = {
-		{512, Activation::kReLU},
-		{256, Activation::kReLU},
-		{64, Activation::kReLU},
-		{MNISTObject::nlabels, Activation::kSigmoid}};
+		{.size = 300, .activation = Activation::kReLU}, {.size = MNISTObject::nlabels, .activation = Activation::kReLU}};
 
 	FullyConnected fc_nn(config, MNISTObject::cols * MNISTObject::rows);
 
@@ -46,19 +44,20 @@ int main(void)
 	if (test_set.empty()) { return 1; }
 
 	// Training Hyperparameters
-	constexpr size_t mini_batch_size = 10;
-	constexpr size_t num_epoch = 30;
-	constexpr float lr = 0.001F;
-	constexpr float grad_norm_clip = 0.5F;
+	constexpr size_t mini_batch_size = 20;
+	constexpr size_t num_epoch = 50;
+	constexpr float lr = 0.005F;
+	OptimiserConfig optimiser_config = {.grad_norm_clip = 0.5F};
 
-	fc_nn.set_grad_norm_clip(grad_norm_clip);
+	OptimiserManager optimiser(optimiser_config);
+	fc_nn.set_optimiser(optimiser);
 
 	std::mt19937 gen(std::random_device{}());
 
 	for (size_t epoch = 0; epoch < num_epoch; ++epoch)
 	{
 		fc_nn.train();
-		fc_nn.set_alpha(lr * (1.0F - static_cast<float>(epoch) / static_cast<float>(num_epoch)));
+		optimiser.set_alpha(lr * (1.0F - static_cast<float>(epoch) / static_cast<float>(num_epoch)));
 		std::shuffle(train_set.begin(), train_set.end(), gen);
 		for (size_t index = 0; index < train_set.size(); index += mini_batch_size)
 		{
@@ -75,7 +74,7 @@ int main(void)
 				mean_loss += loss;
 			}
 			mean_loss /= mini_batch_size;
-			fc_nn.backprop(grad);
+			optimiser.optimise(grad);
 			if (index % (mini_batch_size * 100) == 0 && index > 0)
 			{
 				spdlog::info("[{} / {}] [{} / {}] loss: {}", epoch, num_epoch, index, train_set.size(), mean_loss);
