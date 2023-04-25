@@ -286,13 +286,20 @@ __global__ void cuda_transpose(float* mat_in, float* mat_out, int nx, int ny)
 	mat_out[x * ny + y] = mat_in[y * nx + x];
 }
 
+template <typename T = float>
+inline std::shared_ptr<T> make_shared_cuda(size_t num_elements)
+{
+	float* device_ptr = nullptr;
+	CHECK_CUDA_ERROR(cudaMalloc(&device_ptr, num_elements * sizeof(T)));
+	return std::shared_ptr<T>(device_ptr, [](T* dev_ptr) { CHECK_CUDA_ERROR(cudaFree(dev_ptr)); });
+}
+
 Matrix2d::Matrix2d(Size size) : size_(size), num_elements_(size_.x * size_.y)
 {
 	assert(size_.x > 0);
 	assert(size_.y > 0);
 	set_block_thread_size();
-
-	CHECK_CUDA_ERROR(cudaMalloc(&d_data_, num_elements_ * sizeof(float)));
+	d_data_ = make_shared_cuda(num_elements_);
 }
 
 Matrix2d::Matrix2d(const std::vector<float>& data, Size size) : size_(size)
@@ -312,7 +319,7 @@ Matrix2d::Matrix2d(const std::vector<float>& data, Size size) : size_(size)
 
 	set_block_thread_size();
 
-	CHECK_CUDA_ERROR(cudaMalloc((void**)&d_data_, data.size() * sizeof(float)));
+	d_data_ = make_shared_cuda(data.size());
 	set(data, size);
 }
 
@@ -322,26 +329,28 @@ Matrix2d::Matrix2d(Size size, float scalar) : size_(size), num_elements_(size_.x
 	assert(size_.y > 0);
 	set_block_thread_size();
 
-	CHECK_CUDA_ERROR(cudaMalloc(&d_data_, num_elements_ * sizeof(float)));
+	d_data_ = make_shared_cuda(num_elements_);
 	fill(scalar);
 }
 
 Matrix2d::Matrix2d(float scalar) : size_({1, 1}), num_elements_(1)
 {
 	set_block_thread_size();
-	CHECK_CUDA_ERROR(cudaMalloc(&d_data_, num_elements_ * sizeof(float)));
+	d_data_ = make_shared_cuda(num_elements_);
 	fill(scalar);
 }
 
 Matrix2d::Matrix2d(const Matrix2d& mat)
-		: size_(mat.size_), num_elements_(mat.num_elements_), blocks_(mat.blocks_), threads_(mat.threads_)
+		: size_(mat.size_)
+		, num_elements_(mat.num_elements_)
+		, blocks_(mat.blocks_)
+		, threads_(mat.threads_)
+		, d_data_(mat.d_data_)
 {
-	CHECK_CUDA_ERROR(cudaMalloc((void**)&d_data_, num_elements_ * sizeof(float)));
-	CHECK_CUDA_ERROR(cudaMemcpy(d_data_, mat.d_data_, num_elements_ * sizeof(float), cudaMemcpyDeviceToDevice));
 }
 
 Matrix2d::Matrix2d(Matrix2d&& mat)
-		: d_data_(mat.d_data_)
+		: d_data_(std::move(mat.d_data_))
 		, size_(mat.size_)
 		, num_elements_(mat.num_elements_)
 		, blocks_(mat.blocks_)
@@ -354,8 +363,15 @@ Matrix2d::Matrix2d(Matrix2d&& mat)
 
 Matrix2d::~Matrix2d()
 {
-	CHECK_CUDA_ERROR(cudaFree(d_data_));
 	num_elements_ = 0;
+}
+
+Matrix2d Matrix2d::clone() const
+{
+	Matrix2d mat(size_);
+	CHECK_CUDA_ERROR(
+		cudaMemcpy(mat.d_data_.get(), d_data_.get(), num_elements_ * sizeof(float), cudaMemcpyDeviceToDevice));
+	return mat;
 }
 
 void Matrix2d::set_block_thread_size()
@@ -366,9 +382,11 @@ void Matrix2d::set_block_thread_size()
 
 Matrix2d& Matrix2d::operator=(const Matrix2d& mat)
 {
-	check_bounds_match(mat);
-	assert(d_data_ != nullptr);
-	CHECK_CUDA_ERROR(cudaMemcpy(d_data_, mat.d_data_, num_elements_ * sizeof(float), cudaMemcpyDeviceToDevice));
+	size_ = mat.size_;
+	num_elements_ = mat.num_elements_;
+	threads_ = mat.threads_;
+	blocks_ = mat.blocks_;
+	d_data_ = mat.d_data_;
 	return *this;
 }
 
@@ -378,9 +396,7 @@ Matrix2d& Matrix2d::operator=(Matrix2d&& mat)
 	num_elements_ = mat.num_elements_;
 	blocks_ = mat.blocks_;
 	threads_ = mat.threads_;
-	CHECK_CUDA_ERROR(cudaFree(d_data_));
-	d_data_ = mat.d_data_;
-	mat.d_data_ = nullptr;
+	d_data_ = std::move(mat.d_data_);
 	return *this;
 }
 
@@ -415,7 +431,7 @@ Matrix2d Matrix2d::add(const Matrix2d& mat) const
 
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_add, d_data_, mat.d_data_, mat_result.d_data_, num_elements_);
+	KERNEL_CALL_1D(cuda_add, d_data_.get(), mat.d_data_.get(), mat_result.d_data_.get(), num_elements_);
 
 	return mat_result;
 }
@@ -426,7 +442,7 @@ Matrix2d Matrix2d::sub(const Matrix2d& mat) const
 
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_sub, d_data_, mat.d_data_, mat_result.d_data_, num_elements_);
+	KERNEL_CALL_1D(cuda_sub, d_data_.get(), mat.d_data_.get(), mat_result.d_data_.get(), num_elements_);
 
 	return mat_result;
 }
@@ -437,7 +453,7 @@ Matrix2d Matrix2d::mul(const Matrix2d& mat) const
 
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_mul_cwise, d_data_, mat.d_data_, mat_result.d_data_, num_elements_);
+	KERNEL_CALL_1D(cuda_mul_cwise, d_data_.get(), mat.d_data_.get(), mat_result.d_data_.get(), num_elements_);
 
 	return mat_result;
 }
@@ -454,7 +470,7 @@ Matrix2d Matrix2d::mmul(const Matrix2d& mat) const
 	Matrix2d mat_result({size_.y, mat.size_.x});
 
 	cuda_mat_mul<<<mat_result.blocks_, mat_result.threads_>>>(
-		d_data_, mat.d_data_, mat_result.d_data_, mat.size_.x, size_.y, size_.x);
+		d_data_.get(), mat.d_data_.get(), mat_result.d_data_.get(), mat.size_.x, size_.y, size_.x);
 	cudaDeviceSynchronize();
 	CHECK_CUDA_ERROR(cudaGetLastError());
 
@@ -467,7 +483,7 @@ Matrix2d Matrix2d::div(const Matrix2d& mat) const
 
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_div_cwise, d_data_, mat.d_data_, mat_result.d_data_, num_elements_);
+	KERNEL_CALL_1D(cuda_div_cwise, d_data_.get(), mat.d_data_.get(), mat_result.d_data_.get(), num_elements_);
 
 	return mat_result;
 }
@@ -478,7 +494,7 @@ Matrix2d Matrix2d::max(const Matrix2d& mat) const
 
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_max_cwise, d_data_, mat.d_data_, mat_result.d_data_, num_elements_);
+	KERNEL_CALL_1D(cuda_max_cwise, d_data_.get(), mat.d_data_.get(), mat_result.d_data_.get(), num_elements_);
 
 	return mat_result;
 }
@@ -487,7 +503,7 @@ Matrix2d Matrix2d::add(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_add_scalar, d_data_, mat_result.d_data_, scalar, num_elements_);
+	KERNEL_CALL_1D(cuda_add_scalar, d_data_.get(), mat_result.d_data_.get(), scalar, num_elements_);
 
 	return mat_result;
 }
@@ -496,7 +512,7 @@ Matrix2d Matrix2d::sub(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_sub_scalar, d_data_, mat_result.d_data_, scalar, num_elements_);
+	KERNEL_CALL_1D(cuda_sub_scalar, d_data_.get(), mat_result.d_data_.get(), scalar, num_elements_);
 
 	return mat_result;
 }
@@ -505,7 +521,7 @@ Matrix2d Matrix2d::mul(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_mul_scalar, d_data_, mat_result.d_data_, scalar, num_elements_);
+	KERNEL_CALL_1D(cuda_mul_scalar, d_data_.get(), mat_result.d_data_.get(), scalar, num_elements_);
 
 	return mat_result;
 }
@@ -514,7 +530,7 @@ Matrix2d Matrix2d::div(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_mul_scalar, d_data_, mat_result.d_data_, 1.0F / scalar, num_elements_);
+	KERNEL_CALL_1D(cuda_mul_scalar, d_data_.get(), mat_result.d_data_.get(), 1.0F / scalar, num_elements_);
 
 	return mat_result;
 }
@@ -523,7 +539,7 @@ Matrix2d Matrix2d::max(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_cwise_max, d_data_, mat_result.d_data_, scalar, num_elements_);
+	KERNEL_CALL_1D(cuda_cwise_max, d_data_.get(), mat_result.d_data_.get(), scalar, num_elements_);
 
 	return mat_result;
 }
@@ -532,7 +548,7 @@ Matrix2d Matrix2d::gt(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_cwise_gt, d_data_, mat_result.d_data_, scalar, num_elements_);
+	KERNEL_CALL_1D(cuda_cwise_gt, d_data_.get(), mat_result.d_data_.get(), scalar, num_elements_);
 
 	return mat_result;
 }
@@ -541,7 +557,7 @@ Matrix2d Matrix2d::lt(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_cwise_lt, d_data_, mat_result.d_data_, scalar, num_elements_);
+	KERNEL_CALL_1D(cuda_cwise_lt, d_data_.get(), mat_result.d_data_.get(), scalar, num_elements_);
 
 	return mat_result;
 }
@@ -550,7 +566,7 @@ Matrix2d Matrix2d::inv(const float scalar) const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_invert_scalar, d_data_, mat_result.d_data_, scalar, num_elements_);
+	KERNEL_CALL_1D(cuda_invert_scalar, d_data_.get(), mat_result.d_data_.get(), scalar, num_elements_);
 
 	return mat_result;
 }
@@ -564,7 +580,7 @@ Matrix2d& Matrix2d::operator+=(const Matrix2d& mat)
 {
 	check_bounds_match(mat);
 
-	KERNEL_CALL_1D(cuda_add_self, d_data_, mat.d_data_, num_elements_);
+	KERNEL_CALL_1D(cuda_add_self, d_data_.get(), mat.d_data_.get(), num_elements_);
 
 	return *this;
 }
@@ -583,7 +599,7 @@ Matrix2d& Matrix2d::operator-=(const Matrix2d& mat)
 {
 	check_bounds_match(mat);
 
-	KERNEL_CALL_1D(cuda_sub_self, d_data_, mat.d_data_, num_elements_);
+	KERNEL_CALL_1D(cuda_sub_self, d_data_.get(), mat.d_data_.get(), num_elements_);
 
 	return *this;
 }
@@ -597,7 +613,7 @@ Matrix2d& Matrix2d::operator*=(const Matrix2d& mat)
 {
 	check_bounds_match(mat);
 
-	KERNEL_CALL_1D(cuda_mul_cwise_self, d_data_, mat.d_data_, num_elements_);
+	KERNEL_CALL_1D(cuda_mul_cwise_self, d_data_.get(), mat.d_data_.get(), num_elements_);
 
 	return *this;
 }
@@ -611,7 +627,7 @@ Matrix2d& Matrix2d::operator/=(const Matrix2d& mat)
 {
 	check_bounds_match(mat);
 
-	KERNEL_CALL_1D(cuda_div_cwise_self, d_data_, mat.d_data_, num_elements_);
+	KERNEL_CALL_1D(cuda_div_cwise_self, d_data_.get(), mat.d_data_.get(), num_elements_);
 
 	return *this;
 }
@@ -623,7 +639,7 @@ Matrix2d Matrix2d::operator+(const float scalar) const
 
 Matrix2d& Matrix2d::operator+=(const float scalar)
 {
-	KERNEL_CALL_1D(cuda_add_scalar_self, d_data_, scalar, num_elements_);
+	KERNEL_CALL_1D(cuda_add_scalar_self, d_data_.get(), scalar, num_elements_);
 
 	return *this;
 }
@@ -635,7 +651,7 @@ Matrix2d Matrix2d::operator-(const float scalar) const
 
 Matrix2d& Matrix2d::operator-=(const float scalar)
 {
-	KERNEL_CALL_1D(cuda_sub_scalar_self, d_data_, scalar, num_elements_);
+	KERNEL_CALL_1D(cuda_sub_scalar_self, d_data_.get(), scalar, num_elements_);
 
 	return *this;
 }
@@ -647,7 +663,7 @@ Matrix2d Matrix2d::operator*(const float scalar) const
 
 Matrix2d& Matrix2d::operator*=(const float scalar)
 {
-	KERNEL_CALL_1D(cuda_mul_scalar_self, d_data_, scalar, num_elements_);
+	KERNEL_CALL_1D(cuda_mul_scalar_self, d_data_.get(), scalar, num_elements_);
 
 	return *this;
 }
@@ -659,7 +675,7 @@ Matrix2d Matrix2d::operator/(const float scalar) const
 
 Matrix2d& Matrix2d::operator/=(const float scalar)
 {
-	KERNEL_CALL_1D(cuda_mul_scalar_self, d_data_, 1.0F / scalar, num_elements_);
+	KERNEL_CALL_1D(cuda_mul_scalar_self, d_data_.get(), 1.0F / scalar, num_elements_);
 
 	return *this;
 }
@@ -680,7 +696,7 @@ Matrix2d operator-(float scalar, const Matrix2d& mat)
 
 	const dim3 dim_block(mat.threads_.x * mat.threads_.y * mat.threads_.z, 1, 1);
 	const dim3 dim_grid(mat.blocks_.x * mat.blocks_.y * mat.blocks_.z, 1, 1);
-	cuda_scalar_sub<<<dim_block, dim_grid>>>(mat.d_data_, mat_result.d_data_, scalar, mat.num_elements_);
+	cuda_scalar_sub<<<dim_block, dim_grid>>>(mat.d_data_.get(), mat_result.d_data_.get(), scalar, mat.num_elements_);
 	cudaDeviceSynchronize();
 	CHECK_CUDA_ERROR(cudaGetLastError());
 
@@ -695,7 +711,7 @@ float Matrix2d::sum() const
 	const dim3 dim_block(threads_.x * threads_.y * threads_.z, 1, 1);
 	const dim3 dim_grid(blocks_.x * blocks_.y * blocks_.z, 1, 1);
 	const int smem_size = (dim_block.x <= 32) ? 2 * dim_block.x * sizeof(float) : dim_block.x * sizeof(float);
-	cuda_sum<<<dim_grid, dim_block, smem_size>>>(d_data_, d_sum, num_elements_);
+	cuda_sum<<<dim_grid, dim_block, smem_size>>>(d_data_.get(), d_sum, num_elements_);
 	cudaDeviceSynchronize();
 	CHECK_CUDA_ERROR(cudaGetLastError());
 	float sum = *d_sum;
@@ -710,7 +726,7 @@ float Matrix2d::mag() const
 	const dim3 dim_block(threads_.x * threads_.y * threads_.z, 1, 1);
 	const dim3 dim_grid(blocks_.x * blocks_.y * blocks_.z, 1, 1);
 	const int smem_size = (dim_block.x <= 32) ? 2 * dim_block.x * sizeof(float) : dim_block.x * sizeof(float);
-	cuda_sum<<<dim_grid, dim_block, smem_size>>>(d_data_, d_norm_len, num_elements_);
+	cuda_sum<<<dim_grid, dim_block, smem_size>>>(d_data_.get(), d_norm_len, num_elements_);
 	cudaDeviceSynchronize();
 	CHECK_CUDA_ERROR(cudaGetLastError());
 	float mag = *d_norm_len;
@@ -728,16 +744,16 @@ Matrix2d Matrix2d::transpose() const
 {
 	Matrix2d mat_result({size_.x, size_.y});
 
-	KERNEL_CALL_2D(cuda_transpose, d_data_, mat_result.d_data_, size_.x, size_.y);
+	KERNEL_CALL_2D(cuda_transpose, d_data_.get(), mat_result.d_data_.get(), size_.x, size_.y);
 
 	return mat_result;
 }
 
-Matrix2d& Matrix2d::flatten()
+Matrix2d Matrix2d::flatten()
 {
-	size_ = Size{size_.x * size_.y, 1};
-
-	return *this;
+	Matrix2d mat(*this);
+	mat.size_ = Size{num_elements_, 1};
+	return mat;
 }
 
 bool Matrix2d::isnan() const
@@ -746,7 +762,7 @@ bool Matrix2d::isnan() const
 	CHECK_CUDA_ERROR(cudaMallocManaged((void**)&d_is_nan, sizeof(bool)));
 	*d_is_nan = false;
 	cudaDeviceSynchronize();
-	KERNEL_CALL_1D(cuda_isnan, d_data_, d_is_nan, num_elements_);
+	KERNEL_CALL_1D(cuda_isnan, d_data_.get(), d_is_nan, num_elements_);
 	bool is_nan = *d_is_nan;
 	CHECK_CUDA_ERROR(cudaFree(d_is_nan));
 	return is_nan;
@@ -758,7 +774,7 @@ bool Matrix2d::isinf() const
 	CHECK_CUDA_ERROR(cudaMallocManaged((void**)&d_is_inf, sizeof(bool)));
 	*d_is_inf = false;
 	cudaDeviceSynchronize();
-	KERNEL_CALL_1D(cuda_isinf, d_data_, d_is_inf, num_elements_);
+	KERNEL_CALL_1D(cuda_isinf, d_data_.get(), d_is_inf, num_elements_);
 	bool is_inf = *d_is_inf;
 	CHECK_CUDA_ERROR(cudaFree(d_is_inf));
 	return is_inf;
@@ -766,14 +782,14 @@ bool Matrix2d::isinf() const
 
 void Matrix2d::fill(float scalar)
 {
-	KERNEL_CALL_1D(cuda_fill, d_data_, scalar, num_elements_);
+	KERNEL_CALL_1D(cuda_fill, d_data_.get(), scalar, num_elements_);
 }
 
 Matrix2d Matrix2d::exp() const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_exp, d_data_, mat_result.d_data_, num_elements_);
+	KERNEL_CALL_1D(cuda_exp, d_data_.get(), mat_result.d_data_.get(), num_elements_);
 
 	return mat_result;
 }
@@ -782,7 +798,7 @@ Matrix2d Matrix2d::neg() const
 {
 	Matrix2d mat_result(size_);
 
-	KERNEL_CALL_1D(cuda_neg, d_data_, mat_result.d_data_, num_elements_);
+	KERNEL_CALL_1D(cuda_neg, d_data_.get(), mat_result.d_data_.get(), num_elements_);
 
 	return mat_result;
 }
@@ -791,7 +807,7 @@ float Matrix2d::get(int y, int x) const
 {
 	float element;
 	int i = size_.x * y + x;
-	CHECK_CUDA_ERROR(cudaMemcpy(&element, &(d_data_[i]), sizeof(float), cudaMemcpyDeviceToHost));
+	CHECK_CUDA_ERROR(cudaMemcpy(&element, &(d_data_.get()[i]), sizeof(float), cudaMemcpyDeviceToHost));
 	return element;
 }
 
@@ -799,7 +815,7 @@ std::vector<float> Matrix2d::get() const
 {
 	std::vector<float> data;
 	data.resize(num_elements_);
-	CHECK_CUDA_ERROR(cudaMemcpy(data.data(), d_data_, data.size() * sizeof(float), cudaMemcpyDeviceToHost));
+	CHECK_CUDA_ERROR(cudaMemcpy(data.data(), d_data_.get(), data.size() * sizeof(float), cudaMemcpyDeviceToHost));
 	return data;
 }
 
@@ -809,7 +825,7 @@ void Matrix2d::set(const std::vector<float>& data, Size size)
 	assert(size.y > 0);
 	size_ = size;
 	num_elements_ = static_cast<int>(data.size());
-	CHECK_CUDA_ERROR(cudaMemcpy(d_data_, data.data(), data.size() * sizeof(float), cudaMemcpyHostToDevice));
+	CHECK_CUDA_ERROR(cudaMemcpy(d_data_.get(), data.data(), data.size() * sizeof(float), cudaMemcpyHostToDevice));
 	cudaDeviceSynchronize();
 	CHECK_CUDA_ERROR(cudaGetLastError());
 }
@@ -817,7 +833,7 @@ void Matrix2d::set(const std::vector<float>& data, Size size)
 Matrix2d eye(Size size)
 {
 	Matrix2d mat(size);
-	cuda_eye<<<mat.blocks_, mat.threads_>>>(mat.d_data_, mat.size_.x, mat.size_.y);
+	cuda_eye<<<mat.blocks_, mat.threads_>>>(mat.d_data_.get(), mat.size_.x, mat.size_.y);
 	cudaDeviceSynchronize();
 	CHECK_CUDA_ERROR(cudaGetLastError());
 	return mat;

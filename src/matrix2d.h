@@ -2,6 +2,7 @@
 
 #include <vector_types.h>
 
+#include <memory>
 #include <vector>
 
 struct Size
@@ -24,6 +25,8 @@ public:
 
 	Matrix2d& operator=(const Matrix2d& mat);
 	Matrix2d& operator=(Matrix2d&& mat);
+
+	Matrix2d clone() const;
 
 	Size size() const;
 	int num_elements() const;
@@ -80,7 +83,7 @@ public:
 	Matrix2d exp() const;
 	Matrix2d neg() const;
 	Matrix2d transpose() const;
-	Matrix2d& flatten();
+	Matrix2d flatten();
 	bool isnan() const;
 	bool isinf() const;
 	friend Matrix2d eye(Size size);
@@ -97,7 +100,7 @@ private:
 	void set_block_thread_size();
 
 private:
-	float* d_data_ = nullptr;
+	std::shared_ptr<float> d_data_ = nullptr;
 	Size size_;
 	int num_elements_;
 	dim3 blocks_;
@@ -119,12 +122,6 @@ inline Matrix2d operator*(float scalar, const Matrix2d& mat)
 inline Matrix2d operator/(float scalar, const Matrix2d& mat)
 {
 	return mat.inv(scalar);
-}
-
-inline Matrix2d flatten(const Matrix2d& mat)
-{
-	auto flattened = mat;
-	return flattened.flatten();
 }
 
 Matrix2d eye(Size size);
